@@ -1,7 +1,5 @@
 #include "ImGuiFD.h"
 
-#define USE_MATERIAL_SYMBOLS
-
 #include <stdint.h>
 #include <string.h>
 #include <time.h> // used for localtime() and strftime()
@@ -1120,6 +1118,18 @@ namespace ImGuiFD
     snprintf(buf, bufSize, "%" PRIu64 " Bytes", size);
   }
 
+  static const char *GetIconString(const char *materialSymbol, const char *fallbackText)
+  {
+    if (settings.useMaterialSymbols)
+    {
+      return materialSymbol;
+    }
+    else
+    {
+      return fallbackText;
+    }
+  }
+
   static void OpenNow()
   {
     fd->inputStrs = utils::splitInput(fd->inputText.c_str(), fd->currentPath.toString().c_str());
@@ -1241,13 +1251,8 @@ namespace ImGuiFD
     bool canUndo = fd->canUndo();
     if (!canUndo)
       ImGui::BeginDisabled();
-#ifdef USE_MATERIAL_SYMBOLS
-    if (ImGui::Button(ICON_MD_ARROW_BACK))
+    if (ImGui::Button(GetIconString(ICON_MD_ARROW_BACK, "<")))
     {
-#else
-    if (ImGui::Button("<"))
-    {
-#endif
       fd->undo();
     }
     if (!canUndo)
@@ -1258,26 +1263,16 @@ namespace ImGuiFD
     bool canRedo = fd->canRedo();
     if (!canRedo)
       ImGui::BeginDisabled();
-#ifdef USE_MATERIAL_SYMBOLS
-    if (ImGui::Button(ICON_MD_ARROW_FORWARD))
+    if (ImGui::Button(GetIconString(ICON_MD_ARROW_FORWARD, ">")))
     {
-#else
-    if (ImGui::Button(">"))
-    {
-#endif
       fd->redo();
     }
     if (!canRedo)
       ImGui::EndDisabled();
 
     ImGui::SameLine();
-#ifdef USE_MATERIAL_SYMBOLS
-    if (ImGui::Button(ICON_MD_ARROW_UPWARD))
+    if (ImGui::Button(GetIconString(ICON_MD_ARROW_UPWARD, "^")))
     {
-#else
-    if (ImGui::Button("^"))
-    {
-#endif
       fd->dirGoUp();
     }
   }
@@ -1376,13 +1371,7 @@ namespace ImGuiFD
         ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetCursorScreenPos(),
                                                   ImGui::GetCursorScreenPos() + ImVec2(ellipseBtnWidth, ImGui::GetFrameHeight()),
                                                   ImColor(ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg)));
-        if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-                ICON_MD_MORE_HORIZ
-#else
-                "..."
-#endif
-                ))
+        if (ImGui::Button(GetIconString(ICON_MD_MORE_HORIZ, "...")))
         { // ellipse Button
           fd->forceDisplayAllDirs = true;
         }
@@ -1462,1092 +1451,1017 @@ namespace ImGuiFD
                             (settingsBtnWidth + style.ItemSpacing.x));
     ImGui::SameLine();
 
-#ifdef USE_MATERIAL_SYMBOLS
-    const char *labels[];
-    if (ImGui::Button(ICON_MD_ARROW_BACK))
+    const char *labels[] = {GetIconString(ICON_MD_LIST, "T"), GetIconString(ICON_MD_GRID_VIEW, "I")};
+
+    // const char *labels[] = {"T", "I"};
+    size_t mode = settings.displayMode;
+    if (ComboVertical("DisplayModeBtn", &mode, labels, 2, {displayModeBtnWidth, 0}))
     {
-      labels[] = {ICON_MD_PAGEVIEW, ICON_MD_LIST}
-#else
-    labels[] = {"T", "I"};
-#endif
-
-      // const char *labels[] = {"T", "I"};
-      size_t mode = settings.displayMode;
-      if (ComboVertical("DisplayModeBtn", &mode, labels, 2, {displayModeBtnWidth, 0}))
-      {
-        settings.displayMode = (uint8_t)mode;
-      }
-
-      ImGui::SameLine();
-
-      if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-              ICON_MD_SETTINGS
-#else
-            "S"
-#endif
-              ))
-      {
-        ImGui::OpenPopup((fd->str_id + "SettingsPopup").c_str());
-      }
-
-      if (ImGui::BeginPopup((fd->str_id + "SettingsPopup").c_str()))
-      {
-        DrawSettings();
-        ImGui::EndPopup();
-      }
+      settings.displayMode = (uint8_t)mode;
     }
 
-    static void DrawDirFiles_TableRow(size_t row)
+    ImGui::SameLine();
+
+    if (ImGui::Button(GetIconString(ICON_MD_SETTINGS, "S")))
     {
-      auto &entry = fd->entrys.get(row);
-      size_t ind = fd->entrys.getActualIndex(row);
+      ImGui::OpenPopup((fd->str_id + "SettingsPopup").c_str());
+    }
 
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      bool isSel = fd->selected.contains(ind);
-      ImGuiSelectableFlags flags =
-          ImGuiSelectableFlags_AllowItemOverlap | ImGuiSelectableFlags_SpanAllColumns;
+    if (ImGui::BeginPopup((fd->str_id + "SettingsPopup").c_str()))
+    {
+      DrawSettings();
+      ImGui::EndPopup();
+    }
+  }
 
-#ifdef USE_MATERIAL_SYMBOLS
-      if (ImGui::Selectable(entry.isFolder ? ICON_MD_FOLDER : ICON_MD_ARTICLE, isSel, flags))
+  static void DrawDirFiles_TableRow(size_t row)
+  {
+    auto &entry = fd->entrys.get(row);
+    size_t ind = fd->entrys.getActualIndex(row);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    bool isSel = fd->selected.contains(ind);
+    ImGuiSelectableFlags flags =
+        ImGuiSelectableFlags_AllowItemOverlap | ImGuiSelectableFlags_SpanAllColumns;
+
+    if (ImGui::Selectable(GetIconString(entry.isFolder ? ICON_MD_FOLDER : ICON_MD_ARTICLE,
+                                        entry.isFolder ? "[DIR]" : "[FILE]"),
+                          isSel,
+                          flags))
+      ClickedOnEntrySelect(ind, isSel, entry.isFolder);
+
+    CheckDoubleClick(entry);
+
+    ImGui::TableNextColumn();
+    ImGui::TextUnformatted(entry.name);
+
+    ImGui::TableNextColumn();
+    if (entry.size != (uint64_t)-1)
+    {
+      char buf[128];
+      formatSize(buf, sizeof(buf), entry.size);
+      ImGui::TextUnformatted(buf);
+    }
+    else
+      ImGui::Dummy({0, 0});
+
+    ImGui::TableNextColumn();
+    if (entry.lastModified != (time_t)-1)
+    {
+      char buf[128];
+      formatTime(buf, sizeof(buf), entry.lastModified);
+      ImGui::TextUnformatted(buf);
+    }
+    else
+      ImGui::Dummy({0, 0});
+
+    ImGui::TableNextColumn();
+    if (entry.creationDate != (time_t)-1)
+    {
+      char buf[128];
+      formatTime(buf, sizeof(buf), entry.creationDate);
+      ImGui::TextUnformatted(buf);
+    }
+    else
+      ImGui::Dummy({0, 0});
+  }
+
+  static void DrawDirFiles_Table(float height)
+  {
+    if (height <= 0)
+      return;
+
+    ImGuiTableFlags flags =
+        //	sizeing:
+        ImGuiTableFlags_NoHostExtendX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY |
+        ImGuiTableFlags_BordersOuter |
+        // style:
+        ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_RowBg |
+        // layout:
+        ImGuiTableFlags_Reorderable | ImGuiTableFlags_Resizable |
+        // sorting:
+        ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti;
+
+    // const ImVec2 tableScreenPos = ImGui::GetCursorScreenPos();
+
+    if (ImGui::BeginTable("Dir", 5, flags, {0, height}))
+    {
+      ImGui::TableSetupScrollFreeze(0, 1); // make Header always visible
+      ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_NoSort);
+      ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_DefaultSort, 0, DEIG_NAME);
+      ImGui::TableSetupColumn("Size", 0, 0, DEIG_SIZE);
+      ImGui::TableSetupColumn("Creation Date", 0, 0, DEIG_CREATION_DATE);
+      ImGui::TableSetupColumn("Last Modified", 0, 0, DEIG_LASTMOD_DATE);
+      ImGui::TableHeadersRow();
+
+      if (ImGuiTableSortSpecs *sorts_specs = ImGui::TableGetSortSpecs())
+        if (sorts_specs->SpecsDirty || !fd->entrys.sorted)
+        {
+          fd->entrys.sort(sorts_specs);
+          sorts_specs->SpecsDirty = false;
+        }
+
+      ImGuiListClipper clipper;
+      clipper.Begin((int)fd->entrys.size());
+      while (clipper.Step())
       {
-#else
-    if (ImGui::Selectable(entry.isFolder ? "[DIR]" : "[FILE]", isSel, flags))
-    {
-#endif
-        ClickedOnEntrySelect(ind, isSel, entry.isFolder);
+        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
+        {
+          ImGui::PushID(row);
+
+          DrawDirFiles_TableRow(row);
+
+          ImGui::PopID();
+        }
       }
+      ImGui::EndTable();
+    }
 
-      CheckDoubleClick(entry);
+    /*ImGui::GetWindowDrawList()->AddRect(
+            tableScreenPos, { tableScreenPos.x + ImGui::GetContentRegionAvail().x, tableScreenPos.y +
+    height }, ImColor(ImGui::GetStyleColorVec4(ImGuiCol_Border))
+    );*/
+  }
 
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(entry.name);
+  static void DrawDirFiles_IconsItemDesc(const DirEntry &entry)
+  {
+    ImGui::PushStyleColor(ImGuiCol_Text, settings.descTextCol);
 
-      ImGui::TableNextColumn();
+    if (ImGui::BeginTable("ToolTipDescriptionTable", 2))
+    {
       if (entry.size != (uint64_t)-1)
       {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted("Size:");
+
+        ImGui::TableNextColumn();
         char buf[128];
         formatSize(buf, sizeof(buf), entry.size);
         ImGui::TextUnformatted(buf);
       }
-      else
-        ImGui::Dummy({0, 0});
 
-      ImGui::TableNextColumn();
-      if (entry.lastModified != (time_t)-1)
-      {
-        char buf[128];
-        formatTime(buf, sizeof(buf), entry.lastModified);
-        ImGui::TextUnformatted(buf);
-      }
-      else
-        ImGui::Dummy({0, 0});
-
-      ImGui::TableNextColumn();
       if (entry.creationDate != (time_t)-1)
       {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted("Created:");
+
+        ImGui::TableNextColumn();
         char buf[128];
         formatTime(buf, sizeof(buf), entry.creationDate);
         ImGui::TextUnformatted(buf);
       }
-      else
-        ImGui::Dummy({0, 0});
-    }
-    static void DrawDirFiles_Table(float height)
-    {
-      if (height <= 0)
-        return;
 
-      ImGuiTableFlags flags =
-          //	sizeing:
-          ImGuiTableFlags_NoHostExtendX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY |
-          ImGuiTableFlags_BordersOuter |
-          // style:
-          ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_RowBg |
-          // layout:
-          ImGuiTableFlags_Reorderable | ImGuiTableFlags_Resizable |
-          // sorting:
-          ImGuiTableFlags_Sortable | ImGuiTableFlags_SortMulti;
-
-      // const ImVec2 tableScreenPos = ImGui::GetCursorScreenPos();
-
-      if (ImGui::BeginTable("Dir", 5, flags, {0, height}))
+      if (entry.lastModified != (time_t)-1)
       {
-        ImGui::TableSetupScrollFreeze(0, 1); // make Header always visible
-        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_NoSort);
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_DefaultSort, 0, DEIG_NAME);
-        ImGui::TableSetupColumn("Size", 0, 0, DEIG_SIZE);
-        ImGui::TableSetupColumn("Creation Date", 0, 0, DEIG_CREATION_DATE);
-        ImGui::TableSetupColumn("Last Modified", 0, 0, DEIG_LASTMOD_DATE);
-        ImGui::TableHeadersRow();
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted("Last Modified:");
 
-        if (ImGuiTableSortSpecs *sorts_specs = ImGui::TableGetSortSpecs())
-          if (sorts_specs->SpecsDirty || !fd->entrys.sorted)
-          {
-            fd->entrys.sort(sorts_specs);
-            sorts_specs->SpecsDirty = false;
-          }
-
-        ImGuiListClipper clipper;
-        clipper.Begin((int)fd->entrys.size());
-        while (clipper.Step())
-        {
-          for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
-          {
-            ImGui::PushID(row);
-
-            DrawDirFiles_TableRow(row);
-
-            ImGui::PopID();
-          }
-        }
-        ImGui::EndTable();
+        ImGui::TableNextColumn();
+        char buf[128];
+        formatTime(buf, sizeof(buf), entry.lastModified);
+        ImGui::TextUnformatted(buf);
       }
 
-      /*ImGui::GetWindowDrawList()->AddRect(
-              tableScreenPos, { tableScreenPos.x + ImGui::GetContentRegionAvail().x, tableScreenPos.y +
-      height }, ImColor(ImGui::GetStyleColorVec4(ImGuiCol_Border))
-      );*/
+      ImGui::EndTable();
     }
 
-    static void DrawDirFiles_IconsItemDesc(const DirEntry &entry)
+    ImGui::PopStyleColor();
+  }
+
+  static void DrawDirFiles_Icons(float height)
+  {
+    if (height <= 0)
+      return;
+
+    // calculating item sizes
+    const size_t numOfItems = fd->entrys.size();
+
+    const float itemWidthRaw = settings.iconModeSize;
+    const float itemHeight = itemWidthRaw * (3.0f / 4.0f);
+    const ImVec2 padding(5, 5);
+
+    const float width = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
+
+    size_t itemsPerLineRaw = (size_t)(width / (itemWidthRaw + padding.x * 2));
+    if (itemsPerLineRaw == 0)
+      itemsPerLineRaw = 1;
+
+    size_t itemsPerLine = itemsPerLineRaw;
+    if (itemsPerLine > numOfItems && numOfItems > 0)
+      itemsPerLine = numOfItems;
+
+    float itemWidth = itemWidthRaw;
+
+    if (settings.adjustIconWidth)
     {
-      ImGui::PushStyleColor(ImGuiCol_Text, settings.descTextCol);
-
-      if (ImGui::BeginTable("ToolTipDescriptionTable", 2))
-      {
-        if (entry.size != (uint64_t)-1)
-        {
-          ImGui::TableNextRow();
-          ImGui::TableNextColumn();
-          ImGui::TextUnformatted("Size:");
-
-          ImGui::TableNextColumn();
-          char buf[128];
-          formatSize(buf, sizeof(buf), entry.size);
-          ImGui::TextUnformatted(buf);
-        }
-
-        if (entry.creationDate != (time_t)-1)
-        {
-          ImGui::TableNextRow();
-          ImGui::TableNextColumn();
-          ImGui::TextUnformatted("Created:");
-
-          ImGui::TableNextColumn();
-          char buf[128];
-          formatTime(buf, sizeof(buf), entry.creationDate);
-          ImGui::TextUnformatted(buf);
-        }
-
-        if (entry.lastModified != (time_t)-1)
-        {
-          ImGui::TableNextRow();
-          ImGui::TableNextColumn();
-          ImGui::TextUnformatted("Last Modified:");
-
-          ImGui::TableNextColumn();
-          char buf[128];
-          formatTime(buf, sizeof(buf), entry.lastModified);
-          ImGui::TextUnformatted(buf);
-        }
-
-        ImGui::EndTable();
-      }
-
-      ImGui::PopStyleColor();
+      float widthLeft = width - ((itemWidthRaw + padding.x * 2) * itemsPerLine);
+      float itemWidthExtra = ImMin(itemWidthRaw * 0.5f, widthLeft / itemsPerLine);
+      itemWidth += itemWidthExtra;
     }
-    static void DrawDirFiles_Icons(float height)
+
+    size_t numOfLines = numOfItems / itemsPerLine;
+    if (numOfItems % itemsPerLineRaw != 0 && numOfLines > 0)
+      numOfLines++;
+
+    if (ImGui::BeginChild("IconTable", {0, height}, true))
     {
-      if (height <= 0)
-        return;
+      ImGui::SetCursorPos(ImGui::GetCursorPos() + padding);
+      ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, padding);
+      ImGuiStyle &style = ImGui::GetStyle();
 
-      // calculating item sizes
-      const size_t numOfItems = fd->entrys.size();
-
-      const float itemWidthRaw = settings.iconModeSize;
-      const float itemHeight = itemWidthRaw * (3.0f / 4.0f);
-      const ImVec2 padding(5, 5);
-
-      const float width = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
-
-      size_t itemsPerLineRaw = (size_t)(width / (itemWidthRaw + padding.x * 2));
-      if (itemsPerLineRaw == 0)
-        itemsPerLineRaw = 1;
-
-      size_t itemsPerLine = itemsPerLineRaw;
-      if (itemsPerLine > numOfItems && numOfItems > 0)
-        itemsPerLine = numOfItems;
-
-      float itemWidth = itemWidthRaw;
-
-      if (settings.adjustIconWidth)
+      if (numOfItems == 0)
       {
-        float widthLeft = width - ((itemWidthRaw + padding.x * 2) * itemsPerLine);
-        float itemWidthExtra = ImMin(itemWidthRaw * 0.5f, widthLeft / itemsPerLine);
-        itemWidth += itemWidthExtra;
+        const char *msg = "Directory is Empty!";
+        ImVec2 msgSize = ImGui::CalcTextSize(msg);
+        ImVec2 crsr = ImGui::GetCursorPos();
+        ImGui::SetCursorPos(
+            ImVec2{ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x / 2 - msgSize.x / 2,
+                   ImGui::GetCursorPosY() + height / 10 - msgSize.y / 2});
+        ImGui::TextUnformatted(msg);
+        ImGui::SetCursorPos(crsr);
       }
 
-      size_t numOfLines = numOfItems / itemsPerLine;
-      if (numOfItems % itemsPerLineRaw != 0 && numOfLines > 0)
-        numOfLines++;
+      const ImVec2 totalCursorStart = ImGui::GetCursorPos();
 
-      if (ImGui::BeginChild("IconTable", {0, height}, true))
+      ImGuiListClipper clipper;
+      clipper.Begin((int)numOfLines, itemHeight + style.ItemSpacing.y * 2);
+      while (clipper.Step())
       {
-        ImGui::SetCursorPos(ImGui::GetCursorPos() + padding);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, padding);
-        ImGuiStyle &style = ImGui::GetStyle();
-
-        if (numOfItems == 0)
+        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
         {
-          const char *msg = "Directory is Empty!";
-          ImVec2 msgSize = ImGui::CalcTextSize(msg);
-          ImVec2 crsr = ImGui::GetCursorPos();
-          ImGui::SetCursorPos(
-              ImVec2{ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x / 2 - msgSize.x / 2,
-                     ImGui::GetCursorPosY() + height / 10 - msgSize.y / 2});
-          ImGui::TextUnformatted(msg);
-          ImGui::SetCursorPos(crsr);
-        }
+          size_t itemsInThisLine = itemsPerLine;
+          if ((size_t)row == numOfLines - 1)
+            itemsInThisLine = numOfItems - itemsPerLine * (numOfLines - 1);
 
-        const ImVec2 totalCursorStart = ImGui::GetCursorPos();
-
-        ImGuiListClipper clipper;
-        clipper.Begin((int)numOfLines, itemHeight + style.ItemSpacing.y * 2);
-        while (clipper.Step())
-        {
-          for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
+          for (size_t col = 0; col < itemsInThisLine; col++)
           {
-            size_t itemsInThisLine = itemsPerLine;
-            if ((size_t)row == numOfLines - 1)
-              itemsInThisLine = numOfItems - itemsPerLine * (numOfLines - 1);
+            const size_t ind = row * itemsPerLineRaw + col;
 
-            for (size_t col = 0; col < itemsInThisLine; col++)
+            const size_t id = fd->entrys.getInd(ind);
+
+            ImGui::PushID((ImGuiID)ind);
+
+            auto &entry = fd->entrys.getRaw(id);
+            const bool isSel = fd->selected.contains(id);
+
+            ImVec2 cursorStart =
+                totalCursorStart + ImVec2{(itemWidth + style.ItemSpacing.x * 2) * col,
+                                          (itemHeight + style.ItemSpacing.y * 2) * row};
+            ImVec2 cursorEnd = cursorStart + ImVec2{itemWidth, itemHeight};
+            ImGui::SetCursorPos(cursorStart);
+            ImGui::Selectable("", isSel, 0, {itemWidth, itemHeight});
+            if (ImGui::IsItemClicked() ||
+                ImGui::IsItemClicked(
+                    ImGuiMouseButton_Right))
+            { // directly using return value of Selectable doesnt
+              // work when going into folder (instantly selects
+              // hovered item) => ImGui bug?
+              ClickedOnEntrySelect(id, isSel, entry.isFolder);
+            }
+
+            CheckDoubleClick(entry);
+
+            int maxTextLines = 2;
+            float textY = cursorEnd.y - ImGui::GetTextLineHeight() * maxTextLines;
+
+            FileData *fileData = fd->fileDataCache.get(entry);
+            const bool isImage = fileData && fileData->thumbnail;
+            if (isImage && fileData->thumbnail->loadDone)
             {
-              const size_t ind = row * itemsPerLineRaw + col;
+              // Tooltip
+              if (ImGui::IsItemHovered())
+              {
+                ImGui::BeginTooltip();
 
-              const size_t id = fd->entrys.getInd(ind);
+                float size = 200;
+                float img_width, img_height;
 
-              ImGui::PushID((ImGuiID)ind);
+                if (fileData->thumbnail->width > fileData->thumbnail->height)
+                {
+                  img_width = size;
+                  img_height =
+                      ((float)fileData->thumbnail->height / (float)fileData->thumbnail->width) *
+                      img_width;
+                }
+                else
+                {
+                  img_height = size;
+                  img_width =
+                      ((float)fileData->thumbnail->width / (float)fileData->thumbnail->height) *
+                      img_height;
+                }
 
-              auto &entry = fd->entrys.getRaw(id);
-              const bool isSel = fd->selected.contains(id);
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x / 2 -
+                                     img_width / 2); // center image vertically
+                ImGui::Image(fileData->thumbnail->texID, {img_width, img_height});
+                ImGui::TextUnformatted(entry.name);
 
-              ImVec2 cursorStart =
-                  totalCursorStart + ImVec2{(itemWidth + style.ItemSpacing.x * 2) * col,
-                                            (itemHeight + style.ItemSpacing.y * 2) * row};
-              ImVec2 cursorEnd = cursorStart + ImVec2{itemWidth, itemHeight};
-              ImGui::SetCursorPos(cursorStart);
-              ImGui::Selectable("", isSel, 0, {itemWidth, itemHeight});
-              if (ImGui::IsItemClicked() ||
-                  ImGui::IsItemClicked(
-                      ImGuiMouseButton_Right))
-              { // directly using return value of Selectable doesnt
-                // work when going into folder (instantly selects
-                // hovered item) => ImGui bug?
-                ClickedOnEntrySelect(id, isSel, entry.isFolder);
+                ImGui::Separator();
+
+                DrawDirFiles_IconsItemDesc(entry);
+
+                if (fileData->thumbnail->origWidth != -1 &&
+                    fileData->thumbnail->origHeight !=
+                        -1)
+                { // check if actual (non thumbnail scaled) size was entered
+                  ImGui::PushStyleColor(ImGuiCol_Text, settings.descTextCol);
+                  ImGui::Separator();
+                  ImGui::Text("Size: %dpx,%dpx",
+                              fileData->thumbnail->origWidth,
+                              fileData->thumbnail->origHeight);
+                  ImGui::PopStyleColor();
+                }
+                ImGui::EndTooltip();
               }
 
-              CheckDoubleClick(entry);
-
-              int maxTextLines = 2;
-              float textY = cursorEnd.y - ImGui::GetTextLineHeight() * maxTextLines;
-
-              FileData *fileData = fd->fileDataCache.get(entry);
-              const bool isImage = fileData && fileData->thumbnail;
-              if (isImage && fileData->thumbnail->loadDone)
+              float imgHeightMax = textY - cursorStart.y;
+              float imgHeight = imgHeightMax;
+              float imgWidth =
+                  ((float)fileData->thumbnail->width / (float)fileData->thumbnail->height) *
+                  imgHeight;
+              if (imgWidth > itemWidth)
               {
-                // Tooltip
-                if (ImGui::IsItemHovered())
+                imgWidth = itemWidth;
+                imgHeight = ((float)fileData->thumbnail->height / (float)fileData->thumbnail->width) *
+                            imgWidth;
+              }
+              ImGui::SetCursorPos(ImVec2{cursorStart.x + itemWidth / 2 - imgWidth / 2,
+                                         cursorStart.y + imgHeightMax / 2 - imgHeight / 2});
+              ImGui::Image(fileData->thumbnail->texID, ImVec2{imgWidth, imgHeight});
+            }
+            else
+            {
+              // Tooltip
+              if (ImGui::IsItemHovered())
+              {
+                ImGui::BeginTooltip();
+                ImGui::TextUnformatted(entry.name);
+                ImGui::Separator();
+
+                DrawDirFiles_IconsItemDesc(entry);
+
+                ImGui::EndTooltip();
+              }
+
+              const char *iconText;
+              if (!settings.asciiArtIcons)
+              {
+                iconText = GetIconString(entry.isFolder ? ICON_MD_FOLDER : ICON_MD_INSERT_DRIVE_FILE,
+                                         entry.isFolder ? "[DIR]" : "[FILE]");
+                if (settings.useMaterialSymbols)
                 {
-                  ImGui::BeginTooltip();
-
-                  float size = 200;
-                  float img_width, img_height;
-
-                  if (fileData->thumbnail->width > fileData->thumbnail->height)
-                  {
-                    img_width = size;
-                    img_height =
-                        ((float)fileData->thumbnail->height / (float)fileData->thumbnail->width) *
-                        img_width;
-                  }
-                  else
-                  {
-                    img_height = size;
-                    img_width =
-                        ((float)fileData->thumbnail->width / (float)fileData->thumbnail->height) *
-                        img_height;
-                  }
-
-                  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x / 2 -
-                                       img_width / 2); // center image vertically
-                  ImGui::Image(fileData->thumbnail->texID, {img_width, img_height});
-                  ImGui::TextUnformatted(entry.name);
-
-                  ImGui::Separator();
-
-                  DrawDirFiles_IconsItemDesc(entry);
-
-                  if (fileData->thumbnail->origWidth != -1 &&
-                      fileData->thumbnail->origHeight !=
-                          -1)
-                  { // check if actual (non thumbnail scaled) size was entered
-                    ImGui::PushStyleColor(ImGuiCol_Text, settings.descTextCol);
-                    ImGui::Separator();
-                    ImGui::Text("Size: %dpx,%dpx",
-                                fileData->thumbnail->origWidth,
-                                fileData->thumbnail->origHeight);
-                    ImGui::PopStyleColor();
-                  }
-                  ImGui::EndTooltip();
+                  // Temporarily increase font scale for the icon
+                  ImGui::SetWindowFontScale(2.2f); // Adjust scale as needed
                 }
-
-                float imgHeightMax = textY - cursorStart.y;
-                float imgHeight = imgHeightMax;
-                float imgWidth =
-                    ((float)fileData->thumbnail->width / (float)fileData->thumbnail->height) *
-                    imgHeight;
-                if (imgWidth > itemWidth)
-                {
-                  imgWidth = itemWidth;
-                  imgHeight = ((float)fileData->thumbnail->height / (float)fileData->thumbnail->width) *
-                              imgWidth;
-                }
-                ImGui::SetCursorPos(ImVec2{cursorStart.x + itemWidth / 2 - imgWidth / 2,
-                                           cursorStart.y + imgHeightMax / 2 - imgHeight / 2});
-                ImGui::Image(fileData->thumbnail->texID, ImVec2{imgWidth, imgHeight});
               }
               else
               {
-                // Tooltip
-                if (ImGui::IsItemHovered())
-                {
-                  ImGui::BeginTooltip();
-                  ImGui::TextUnformatted(entry.name);
-                  ImGui::Separator();
-
-                  DrawDirFiles_IconsItemDesc(entry);
-
-                  ImGui::EndTooltip();
-                }
-
-                const char *iconText;
-                if (!settings.asciiArtIcons)
-                {
-                  iconText = entry.isFolder ? ICON_MD_FOLDER : ICON_MD_INSERT_DRIVE_FILE;
-#ifdef USE_MATERIAL_SYMBOLS
-                  // Temporarily increase font scale for the icon
-                  ImGui::SetWindowFontScale(1.5f); // Adjust scale as needed
-#endif
-                }
-                else
-                {
-                  iconText = entry.isFolder ? "drwxr-xr-x\n"
-                                              "./"
-                                            : "-rw-r--r--\n"
-                                              "file.txt";
-                }
-
-                ImVec2 textSize = ImGui::CalcTextSize(iconText);
-                ImGui::SetCursorPos(ImVec2{cursorStart.x + itemWidth / 2 - textSize.x / 2,
-                                           cursorStart.y + (textY - cursorStart.y) / 2 - textSize.y / 2});
-
-                ImGui::TextColored(settings.iconTextCol, "%s", iconText);
-
-#ifdef USE_MATERIAL_SYMBOLS
-                // Reset font scale after rendering the icon
-                if (!settings.asciiArtIcons)
-                { // Only reset if we scaled it
-                  ImGui::SetWindowFontScale(1.0f);
-                }
-#endif
+                iconText = entry.isFolder ? "<DIR>\n[___]" : "<TXT>\n|___|";
               }
+              ImVec2 textSize = ImGui::CalcTextSize(iconText);
+              ImGui::SetCursorPos(ImVec2{cursorStart.x + itemWidth / 2 - textSize.x / 2,
+                                         cursorStart.y + (textY - cursorStart.y) / 2 - textSize.y / 2});
 
-              ImGui::SetCursorPos(ImVec2{cursorStart.x, textY});
+              ImGui::TextColored(settings.iconTextCol, "%s", iconText);
+
+              // Reset font scale after rendering the icon
+              if (!settings.asciiArtIcons &&
+                  settings.useMaterialSymbols)
+              { // Only reset if we scaled it
+                ImGui::SetWindowFontScale(1.0f);
+              }
+            }
+
+            ImGui::SetCursorPos(ImVec2{cursorStart.x, textY});
+            {
+              const bool isRenamingThis = entry.id == fd->renameId;
+              const float maxWidth = cursorEnd.x - cursorStart.x;
+
+              if (!isRenamingThis)
               {
-                const bool isRenamingThis = entry.id == fd->renameId;
-                const float maxWidth = cursorEnd.x - cursorStart.x;
-
-                if (!isRenamingThis)
+                TextWrappedCentered(entry.name, maxWidth, maxTextLines);
+              }
+              else
+              {
+                const float textWidth = ImGui::CalcTextSize(fd->renameStr.c_str()).x +
+                                        ImGui::GetStyle().FramePadding.x * 2;
+                const float inputWidth = textWidth < 70 ? 70 : textWidth;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + maxWidth / 2 - inputWidth / 2);
+                ImGui::SetKeyboardFocusHere();
+                if (utils::InputTextString("##renameInput",
+                                           "New Name",
+                                           &fd->renameStr,
+                                           ImGuiInputTextFlags_EnterReturnsTrue,
+                                           {inputWidth, 0}))
                 {
-                  TextWrappedCentered(entry.name, maxWidth, maxTextLines);
-                }
-                else
-                {
-                  const float textWidth = ImGui::CalcTextSize(fd->renameStr.c_str()).x +
-                                          ImGui::GetStyle().FramePadding.x * 2;
-                  const float inputWidth = textWidth < 70 ? 70 : textWidth;
-                  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + maxWidth / 2 - inputWidth / 2);
-                  ImGui::SetKeyboardFocusHere();
-                  if (utils::InputTextString("##renameInput",
-                                             "New Name",
-                                             &fd->renameStr,
-                                             ImGuiInputTextFlags_EnterReturnsTrue,
-                                             {inputWidth, 0}))
+                  ds::string path = fd->currentPath.toString();
+                  IM_ASSERT(path[path.size() - 1] == '/');
+                  bool success =
+                      Native::rename((path + entry.name).c_str(), (path + fd->renameStr).c_str());
+                  if (success)
                   {
-                    ds::string path = fd->currentPath.toString();
-                    IM_ASSERT(path[path.size() - 1] == '/');
-                    bool success =
-                        Native::rename((path + entry.name).c_str(), (path + fd->renameStr).c_str());
-                    if (success)
-                    {
-                      fd->updateEntrys();
-                    }
-                    else
-                    {
-                      // TODO
-                    }
-                    fd->resetRename();
+                    fd->updateEntrys();
                   }
                   else
                   {
-                    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
-                    {
-                      fd->resetRename();
-                    }
+                    // TODO
+                  }
+                  fd->resetRename();
+                }
+                else
+                {
+                  if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+                  {
+                    fd->resetRename();
                   }
                 }
               }
-
-              ImGui::SetCursorPos(cursorEnd);
-
-              // ImGuiWindow* window = ImGui::GetCurrentWindow();
-              // ImVec2 off = { window->Pos.x - window->Scroll.x, window->Pos.y - window->Scroll.y };
-              // ImGui::GetWindowDrawList()->AddRect(cursorStart + off, cursorEnd + off, IM_COL32(255,
-              // 0, 0, 255));
-
-              ImGui::PopID();
-            }
-          }
-        }
-
-        ImGui::PopStyleVar();
-      }
-      ImGui::EndChild();
-    }
-
-    static void DrawContextMenu()
-    {
-      bool openNewFolderPopup = false;
-      if (ImGui::BeginPopup("ContextMenu"))
-      {
-        if (fd->selected.size() == 1)
-        {
-          if (ImGui::MenuItem(
-#ifdef USE_MATERIAL_SYMBOLS
-                  ICON_MD_EDIT " Rename"
-#else
-                "Rename"
-#endif
-                  ))
-          {
-            fd->renameId = fd->getSelectedInd(0).id;
-            fd->renameStr = fd->getSelectedInd(0).name;
-          }
-          ImGui::Separator();
-        }
-
-        if (ImGui::MenuItem(
-#ifdef USE_MATERIAL_SYMBOLS
-                ICON_MD_CLEAR " Clear Selection"
-#else
-              "Clear Selection"
-#endif
-                ))
-        {
-          fd->selected.clear();
-          fd->setInputTextToSelected();
-        }
-
-        if (ImGui::MenuItem(
-#ifdef USE_MATERIAL_SYMBOLS
-                ICON_MD_CREATE_NEW_FOLDER " New Folder"
-#else
-              "New Folder"
-#endif
-                ))
-        {
-          openNewFolderPopup = true;
-        }
-
-        ImGui::EndPopup();
-      }
-      if (openNewFolderPopup)
-        ImGui::OpenPopup("Make New Folder");
-
-      if (ImGui::BeginPopup("Make New Folder"))
-      {
-        ImGui::TextUnformatted("Make a new Folder");
-        ImGui::Separator();
-        ImGui::TextUnformatted("Enter the name of your new folder:");
-
-        utils::InputTextString(
-            "EnterNewFolderName", "Enter the name of the new folder", &fd->newFolderNameStr);
-
-        if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-                ICON_MD_CHECK
-#else
-              "OK"
-#endif
-                ))
-        {
-          bool success =
-              Native::makeFolder((fd->currentPath.toString() + "/" + fd->newFolderNameStr).c_str());
-
-          if (!success)
-          {
-            // TODO:
-            abort(); // temporary
-          }
-
-          fd->newFolderNameStr = "";
-          fd->needsEntrysUpdate = true;
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-                ICON_MD_CANCEL
-#else
-              "Cancel"
-#endif
-                ))
-        {
-          fd->newFolderNameStr = "";
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-      }
-    }
-
-    static void DrawDirFiles()
-    {
-      float winHeight = ImGui::GetWindowContentRegionMax().y - ImGui::GetWindowContentRegionMin().y;
-      float height = winHeight - (ImGui::GetCursorPosY() - ImGui::GetCursorStartPos().y) -
-                     ImGui::GetFrameHeightWithSpacing() * (fd->hasFilter ? 2 : 1);
-      switch (settings.displayMode)
-      {
-      case GlobalSettings::DisplayMode_List:
-        DrawDirFiles_Table(height);
-        break;
-      case GlobalSettings::DisplayMode_Icons:
-        DrawDirFiles_Icons(height);
-        break;
-      }
-
-      if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
-      {
-        ImGui::OpenPopup("ContextMenu");
-      }
-      DrawContextMenu();
-    }
-
-    static bool canOpenNow()
-    {
-      if (fd->isFileMode())
-      {
-        for (size_t i = 0; i < fd->selected.size(); i++)
-        {
-          auto &entry = fd->getSelectedInd(i);
-          if (entry.isFolder)
-            return false;
-        }
-        // for (auto& id : fd->selected) {
-        //
-        // }
-        return fd->inputText.size() > 0;
-      }
-      else if (fd->isDirMode())
-      {
-        return true;
-      }
-      else
-      {
-        abort();
-      }
-    }
-    static void DrawTextField()
-    {
-      const ImGuiStyle &style = ImGui::GetStyle();
-
-#ifdef USE_MATERIAL_SYMBOLS
-      const char *openBtnStr = fd->mode == ImGuiFDMode_SaveFile ? ICON_MD_SAVE : ICON_MD_FOLDER_OPEN;
-#else
-    const char *openBtnStr = fd->mode == ImGuiFDMode_SaveFile ? "Save" : "Open";
-#endif
-      const char *cancelBtnStr = "Cancel";
-      const float minBtnWidth = ImMin(100.0f, ImGui::GetContentRegionAvail().x / 4);
-      const float btnWidht =
-          ImMax(ImMax(ImGui::CalcTextSize(openBtnStr).x, ImGui::CalcTextSize(cancelBtnStr).x),
-                minBtnWidth) +
-          style.FramePadding.x * 2;
-      const float widthWOBtns =
-          ImGui::GetContentRegionAvail().x - 2 * (btnWidht + ImGui::GetStyle().ItemSpacing.x);
-
-      ImGui::PushItemWidth(-FLT_MIN);
-      // file name text input
-      utils::InputTextString(
-          "##Name", "File Name", &fd->inputText, 0, {ImVec2{fd->hasFilter ? 0 : widthWOBtns, 0}});
-
-      // filter combo
-      if (fd->hasFilter)
-      {
-        IM_ASSERT(fd->entrys.filter.filters.size() > 0);
-        ImGui::PushItemWidth(widthWOBtns);
-
-        if (ImGui::BeginCombo(
-                "##filter", fd->entrys.filter.filters[fd->entrys.filter.filterSel].rawStr.c_str()))
-        {
-          for (size_t i = 0; i < fd->entrys.filter.filters.size(); i++)
-          {
-            ImGui::PushID((ImGuiID)i);
-
-            bool isSelected = i == fd->entrys.filter.filterSel;
-            if (ImGui::Selectable(fd->entrys.filter.filters[i].rawStr.c_str(), isSelected))
-            {
-              if (fd->entrys.filter.filterSel != i)
-              {
-                fd->entrys.filter.filterSel = i;
-                fd->updateFiltering();
-              }
             }
 
-            if (isSelected)
-              ImGui::SetItemDefaultFocus();
+            ImGui::SetCursorPos(ImVec2{cursorStart.x, textY});
+
+            // ImGuiWindow* window = ImGui::GetCurrentWindow();
+            // ImVec2 off = { window->Pos.x - window->Scroll.x, window->Pos.y - window->Scroll.y };
+            // ImGui::GetWindowDrawList()->AddRect(cursorStart + off, cursorEnd + off, IM_COL32(255,
+            // 0, 0, 255));
 
             ImGui::PopID();
           }
-
-          ImGui::EndCombo();
         }
-
-        ImGui::PopItemWidth();
       }
 
-      ImGui::SameLine();
+      ImGui::PopStyleVar();
+    }
+    ImGui::EndChild();
+  }
 
+  static void DrawContextMenu()
+  {
+    bool openNewFolderPopup = false;
+    if (ImGui::BeginPopup("ContextMenu"))
+    {
+      if (fd->selected.size() == 1)
       {
-        const bool canOpen = canOpenNow();
-
-        bool drawOpen = true;
-        if (!canOpen && fd->isFileMode() && fd->selected.size() == 1 &&
-            fd->getSelectedInd(0).isFolder)
+        if (ImGui::MenuItem(GetIconString(ICON_MD_EDIT, "Rename")))
         {
-          drawOpen = false;
-          if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-                  ICON_MD_FOLDER_OPEN
-#else
-                "Open Folder"
-#endif
-                  ,
-                  {btnWidht, 0}))
-          {
-            fd->dirMoveDownInto(fd->entrys.get(*fd->selected.begin()).name);
-          }
+          fd->renameId = fd->getSelectedInd(0).id;
+          fd->renameStr = fd->getSelectedInd(0).name;
         }
-
-        if (!canOpen)
-          ImGui::BeginDisabled();
-        if (drawOpen)
-        {
-          // Open Button
-          if (ImGui::Button(openBtnStr, {btnWidht, 0}))
-          {
-            bool done = true;
-
-            if (fd->mode == ImGuiFDMode_SaveFile)
-            {
-              ds::string path =
-                  fd->currentPath.toString() + "/" + fd->inputText.substr(1, fd->inputText.size() - 1);
-              if (Native::fileExists(path.c_str()))
-              {
-                done = false;
-                ImGui::OpenPopup("Overwrite File?");
-              }
-            }
-
-            if (done)
-            {
-              OpenNow();
-            }
-          }
-        }
-        if (!canOpen)
-          ImGui::EndDisabled();
-      }
-
-      ImGui::SameLine();
-      // Close Button
-      if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-              ICON_MD_CANCEL
-#else
-            cancelBtnStr
-#endif
-              ,
-              {btnWidht, 0}))
-      {
-        fd->actionDone = true;
-        fd->selectionMade = false;
-      }
-      ImGui::PopItemWidth();
-
-      ImGui::SetNextWindowPos(
-          ImGui::GetWindowPos() + ImGui::GetWindowSize() / 2, ImGuiCond_Appearing, {0.5f, 0.5f});
-      if (ImGui::BeginPopup("Overwrite File?"))
-      {
-        ImGui::TextUnformatted("This file already Exists!");
         ImGui::Separator();
+      }
 
-        ImGui::Text("Overwrite the File %s?", fd->inputText.c_str());
-        if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-                ICON_MD_CHECK " Overwrite"
-#else
-              "Overwrite" 
-#endif
-                ))
+      if (ImGui::MenuItem(GetIconString(ICON_MD_CLEAR, "Clear Selection")))
+      {
+        fd->selected.clear();
+        fd->setInputTextToSelected();
+      }
+
+      if (ImGui::MenuItem(GetIconString(ICON_MD_CREATE_NEW_FOLDER, "New Folder")))
+      {
+        openNewFolderPopup = true;
+      }
+
+      ImGui::EndPopup();
+    }
+    if (openNewFolderPopup)
+      ImGui::OpenPopup("Make New Folder");
+
+    if (ImGui::BeginPopup("Make New Folder"))
+    {
+      ImGui::TextUnformatted("Make a new Folder");
+      ImGui::Separator();
+      ImGui::TextUnformatted("Enter the name of your new folder:");
+
+      utils::InputTextString(
+          "EnterNewFolderName", "Enter the name of the new folder", &fd->newFolderNameStr);
+
+      if (ImGui::Button(GetIconString(ICON_MD_CHECK, "OK")))
+      {
+        bool success =
+            Native::makeFolder((fd->currentPath.toString() + "/" + fd->newFolderNameStr).c_str());
+
+        if (!success)
         {
-          OpenNow();
+          // TODO:
+          abort(); // temporary
         }
-        ImGui::SameLine();
-        if (ImGui::Button(
-#ifdef USE_MATERIAL_SYMBOLS
-                ICON_MD_CANCEL " Cancel"
-#else
-              "Cancel"
-#endif
-                ))
-        {
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
+
+        fd->newFolderNameStr = "";
+        fd->needsEntrysUpdate = true;
+        ImGui::CloseCurrentPopup();
       }
-    }
-
-    static void CloseDialogID(ImGuiID id)
-    {
-      if (openDialogs.contains(id))
-        openDialogs.getByID(id).toDelete = true;
-    }
-  } // namespace ImGuiFD
-
-  ImGuiFD::RequestFileDataCallback ImGuiFD::FileDataCache::requestFileDataCallB = 0;
-  ImGuiFD::FreeFileDataCallback ImGuiFD::FileDataCache::freeFileDataCallB = 0;
-
-  ImGuiFD::DirEntry::DirEntry() {}
-  ImGuiFD::DirEntry::DirEntry(const DirEntry &src)
-  {
-    operator=(src);
-  }
-  ImGuiFD::DirEntry &ImGuiFD::DirEntry::operator=(const DirEntry &src)
-  {
-    id = src.id;
-    name = src.name ? ImStrdup(src.name) : 0;
-    dir = src.dir ? ImStrdup(src.dir) : 0;
-    path = src.dir ? ImStrdup(src.path) : 0;
-    isFolder = src.isFolder;
-
-    size = src.size;
-    lastModified = src.lastModified;
-    creationDate = src.creationDate;
-
-    return *this;
-  }
-  ImGuiFD::DirEntry::~DirEntry()
-  {
-    IM_FREE((void *)name);
-    IM_FREE((void *)dir);
-    IM_FREE((void *)path);
-  }
-
-  uint64_t ImGuiFD::FileData::getSize() const
-  {
-    uint64_t size = 0;
-    if (thumbnail)
-      size += thumbnail->memSize;
-    return size;
-  }
-
-  void ImGuiFD::SetFileDataCallback(
-      RequestFileDataCallback loadCallB, FreeFileDataCallback unloadCallB)
-  {
-    FileDataCache::requestFileDataCallB = loadCallB;
-    FileDataCache::freeFileDataCallB = unloadCallB;
-  }
-
-  ImGuiFD::FDInstance::FDInstance(const char *str_id) : str_id(str_id), id(ImHashStr(str_id)) {}
-  void ImGuiFD::FDInstance::OpenDialog(ImGuiFDMode mode,
-                                       const char *path,
-                                       const char *filter,
-                                       ImGuiFDDialogFlags flags,
-                                       size_t maxSelections)
-  {
-    ImGuiFD::OpenDialog(str_id.c_str(), mode, path, filter, flags, maxSelections);
-  }
-  bool ImGuiFD::FDInstance::Begin() const
-  {
-    return ImGuiFD::BeginDialog(id);
-  }
-  void ImGuiFD::FDInstance::End() const
-  {
-    ImGuiFD::EndDialog();
-  }
-  void ImGuiFD::FDInstance::DrawDialog(void (*callB)(void *userData), void *userData) const
-  {
-    if (Begin())
-    {
-      if (ImGuiFD::ActionDone())
+      ImGui::SameLine();
+      if (ImGui::Button(GetIconString(ICON_MD_CANCEL, "Cancel")))
       {
-        if (ImGuiFD::SelectionMade())
-        {
-          callB(userData);
-        }
-        ImGuiFD::CloseCurrentDialog();
+        fd->newFolderNameStr = "";
+        ImGui::CloseCurrentPopup();
       }
-      End();
+      ImGui::EndPopup();
     }
   }
-  size_t ImGuiFD::FDInstance::sizeBytes() const
-  {
-    return ds::size_bytes(str_id) + sizeof(id);
-  }
 
-  void ImGuiFD::OpenDialog(const char *str_id,
-                           ImGuiFDMode mode,
-                           const char *path,
-                           const char *filter,
-                           ImGuiFDDialogFlags flags,
-                           size_t maxSelections)
+  static void DrawDirFiles()
   {
-    ImGuiID id = ImHashStr(str_id);
-#if 0
-	IM_ASSERT(!openDialogs.contains(id));
-#else
-    if (openDialogs.contains(id))
+    float winHeight = ImGui::GetWindowContentRegionMax().y - ImGui::GetWindowContentRegionMin().y;
+    float height = winHeight - (ImGui::GetCursorPosY() - ImGui::GetCursorStartPos().y) -
+                   ImGui::GetFrameHeightWithSpacing() * (fd->hasFilter ? 2 : 1);
+    switch (settings.displayMode)
     {
-      if (openDialogs.getByID(id).toDelete)
-      {
-        openDialogs.erase(id);
-      }
-      else
-      {
-        return;
-      }
+    case GlobalSettings::DisplayMode_List:
+      DrawDirFiles_Table(height);
+      break;
+    case GlobalSettings::DisplayMode_Icons:
+      DrawDirFiles_Icons(height);
+      break;
     }
-#endif
-    if (!settings.iconTextColSetByUser)
+
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
     {
-      ImVec4 childBg = ImGui::GetStyle().Colors[ImGuiCol_ChildBg];
-      settings.iconTextCol = ImVec4(1.0f - childBg.x, 1.0f - childBg.y, 1.0f - childBg.z, childBg.w);
+      ImGui::OpenPopup("ContextMenu");
     }
-    openDialogs.insert(id, FileDialog(id, str_id, filter, path, mode, flags, maxSelections));
+    DrawContextMenu();
   }
 
-  void ImGuiFD::CloseDialog(const char *str_id)
+  static bool canOpenNow()
   {
-    ImGuiID id = ImHashStr(str_id);
-    CloseDialogID(id);
-  }
-  void ImGuiFD::CloseCurrentDialog()
-  {
-    IM_ASSERT(fd != 0);
-    ImGuiID id = fd->id;
-    CloseDialogID(id);
-  }
-
-  bool ImGuiFD::BeginDialog(const char *str_id)
-  {
-    ImGuiID id = ImHashStr(str_id);
-    return BeginDialog(id);
-  }
-  bool ImGuiFD::BeginDialog(ImGuiID id)
-  {
-    // Begin/End mismatch
-    IM_ASSERT(fd == 0);
-
-    if (!openDialogs.contains(id))
-      return false;
-
-    fd = &openDialogs.getByID(id);
-
-    ImGuiWindowFlags flags = 0;
-    // if (fd->isModal) flags |= ImGuiWindowFlags_Modal;
-
-    bool open = true;
-    bool ret;
-
-    ImGui::SetNextWindowSize(ImVec2(700, 400), ImGuiCond_Appearing);
-    if (ImGui::Begin(fd->str_id.c_str(), &open, flags))
+    if (fd->isFileMode())
     {
-      fd->update();
-
-      if (fd->showLoadErrorMsg)
+      for (size_t i = 0; i < fd->selected.size(); i++)
       {
-        fd->showLoadErrorMsg = false;
-        ImGui::OpenPopup("Couldn't load directory! ");
+        auto &entry = fd->getSelectedInd(i);
+        if (entry.isFolder)
+          return false;
       }
-
-      if (ImGui::BeginPopupModal("Couldn't load directory! "))
-      {
-        ImGui::TextUnformatted("Couln't load this directory :(");
-        if (ImGui::Button("OK"))
-        {
-          ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-        goto skip;
-      }
-
-      DrawNavigation();
-
-      DrawDirFiles();
-
-      DrawTextField();
-
-    skip:
-      if (!open)
-      {
-        fd->actionDone = true;
-        fd->selectionMade = false;
-      }
-      ret = true;
+      // for (auto& id : fd->selected) {
+      //
+      // }
+      return fd->inputText.size() > 0;
+    }
+    else if (fd->isDirMode())
+    {
+      return true;
     }
     else
     {
-      fd = 0;
-      ret = false;
+      abort();
     }
-
-    ImGui::End();
-
-    return ret;
-  }
-  void ImGuiFD::EndDialog()
-  {
-    // Begin/End mismatch
-    IM_ASSERT(fd != 0);
-
-    if (fd->toDelete)
-      openDialogs.erase(fd->id);
-
-    fd = 0;
   }
 
-  bool ImGuiFD::ActionDone()
+  static void DrawTextField()
   {
-    IM_ASSERT(fd != 0);
-    return fd->actionDone;
-  }
-  bool ImGuiFD::SelectionMade()
-  {
-    IM_ASSERT(fd != 0);
-    return fd->selectionMade;
-  }
-  const char *ImGuiFD::GetResultStringRaw()
-  {
-    IM_ASSERT(fd != 0);
+    const ImGuiStyle &style = ImGui::GetStyle();
 
-    IM_ASSERT(fd->selectionMade);
+    const char *openBtnStr =
+        GetIconString(fd->mode == ImGuiFDMode_SaveFile ? ICON_MD_SAVE " Save" : ICON_MD_FOLDER_OPEN " Open",
+                      fd->mode == ImGuiFDMode_SaveFile ? "Save" : "Open");
+    const char *cancelBtnStr = "Cancel";
+    const float minBtnWidth = ImMin(100.0f, ImGui::GetContentRegionAvail().x / 4);
+    const float btnWidht =
+        ImMax(ImMax(ImGui::CalcTextSize(openBtnStr).x, ImGui::CalcTextSize(cancelBtnStr).x),
+              minBtnWidth) +
+        style.FramePadding.x * 2;
+    const float widthWOBtns =
+        ImGui::GetContentRegionAvail().x - 2 * (btnWidht + ImGui::GetStyle().ItemSpacing.x);
 
-    return fd->inputText.c_str();
-  }
-  size_t ImGuiFD::GetSelectionStringsAmt()
-  {
-    IM_ASSERT(fd != 0);
+    ImGui::PushItemWidth(-FLT_MIN);
+    // file name text input
+    utils::InputTextString(
+        "##Name", "File Name", &fd->inputText, 0, {ImVec2{fd->hasFilter ? 0 : widthWOBtns, 0}});
 
-    IM_ASSERT(fd->selectionMade);
-
-    return fd->selected.size();
-  }
-  const char *ImGuiFD::GetSelectionNameString(size_t ind)
-  {
-    IM_ASSERT(fd != 0);
-
-    IM_ASSERT(fd->selectionMade); // maybe you didn't check if a selection was made?
-
-    return fd->inputStrs[ind].first.c_str();
-  }
-  const char *ImGuiFD::GetSelectionPathString(size_t ind)
-  {
-    IM_ASSERT(fd != 0);
-
-    IM_ASSERT(fd->selectionMade); // maybe you didn't check if a selection was made?
-
-    return fd->inputStrs[ind].second.c_str();
-  }
-
-  void ImGuiFD::DrawDebugWin(const char *str_id)
-  {
-    IM_ASSERT(fd == 0);
-
-    ImGuiID id = ImHashStr(str_id);
-
-    if (!openDialogs.contains(id))
-      return;
-
-    fd = &openDialogs.getByID(id);
-
-    if (ImGui::Begin((fd->str_id + "_DEBUG").c_str()))
+    // filter combo
+    if (fd->hasFilter)
     {
-      float perc = ((float)fd->fileDataCache.size() / (float)fd->fileDataCache.maxSize()) * 100;
-      ImGui::Text("DataLoader: %" PRIu64 "/%" PRIu64 "(%f%%) used",
-                  fd->fileDataCache.size(),
-                  fd->fileDataCache.maxSize(),
-                  perc);
+      IM_ASSERT(fd->entrys.filter.filters.size() > 0);
+      ImGui::PushItemWidth(widthWOBtns);
 
-      /*ImGui::Text("%d loaded", fd->fileDataCache.getOrder().size());
+      if (ImGui::BeginCombo(
+              "##filter", fd->entrys.filter.filters[fd->entrys.filter.filterSel].rawStr.c_str()))
+      {
+        for (size_t i = 0; i < fd->entrys.filter.filters.size(); i++)
+        {
+          ImGui::PushID((ImGuiID)i);
 
-      if (ImGui::BeginTable("Loaded", 5)) {
-              const auto& order = fd->fileDataCache.getOrder();
-              const auto& data = fd->fileDataCache.getData();
+          bool isSelected = i == fd->entrys.filter.filterSel;
+          if (ImGui::Selectable(fd->entrys.filter.filters[i].rawStr.c_str(), isSelected))
+          {
+            if (fd->entrys.filter.filterSel != i)
+            {
+              fd->entrys.filter.filterSel = i;
+              fd->updateFiltering();
+            }
+          }
 
-              ImGui::TableSetupColumn("TN");
-              ImGui::TableSetupColumn("Need");
-              ImGui::TableSetupColumn("Finished");
+          if (isSelected)
+            ImGui::SetItemDefaultFocus();
 
-              for (size_t i = 0; i < order.size(); i++) {
-                      const auto& elem = data.getByID(order[i]);
+          ImGui::PopID();
+        }
 
-                      ImGui::TableNextRow();
-                      ImGui::TableNextColumn();
+        ImGui::EndCombo();
+      }
 
-                      ImGui::Text("%s", !!elem->thumbnail ? "#" : ".");
-
-                      ImGui::TableNextColumn();
-
-                      ImGui::Text("%s", !!elem->stillNeeded ? "#" : ".");
-
-                      ImGui::TableNextColumn();
-
-                      ImGui::Text("%d", elem->loadingFinished);
-              }
-
-              ImGui::EndTable();
-      }*/
+      ImGui::PopItemWidth();
     }
-    ImGui::End();
 
-    fd = 0;
+    ImGui::SameLine();
+
+    {
+      const bool canOpen = canOpenNow();
+
+      bool drawOpen = true;
+      if (!canOpen && fd->isFileMode() && fd->selected.size() == 1 &&
+          fd->getSelectedInd(0).isFolder)
+      {
+        drawOpen = false;
+        if (ImGui::Button(GetIconString(ICON_MD_FOLDER_OPEN, "Open Folder"), {btnWidht, 0}))
+        {
+          fd->dirMoveDownInto(fd->entrys.get(*fd->selected.begin()).name);
+        }
+      }
+
+      if (!canOpen)
+        ImGui::BeginDisabled();
+      if (drawOpen)
+      {
+        // Open Button
+        if (ImGui::Button(openBtnStr, {btnWidht, 0}))
+        {
+          bool done = true;
+
+          if (fd->mode == ImGuiFDMode_SaveFile)
+          {
+            ds::string path =
+                fd->currentPath.toString() + "/" + fd->inputText.substr(1, fd->inputText.size() - 1);
+            if (Native::fileExists(path.c_str()))
+            {
+              done = false;
+              ImGui::OpenPopup("Overwrite File?");
+            }
+          }
+
+          if (done)
+          {
+            OpenNow();
+          }
+        }
+      }
+      if (!canOpen)
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    // Close Button
+    if (ImGui::Button(GetIconString(ICON_MD_CANCEL " Cancel", cancelBtnStr), {btnWidht, 0}))
+    {
+      fd->actionDone = true;
+      fd->selectionMade = false;
+    }
+    ImGui::PopItemWidth();
+
+    ImGui::SetNextWindowPos(
+        ImGui::GetWindowPos() + ImGui::GetWindowSize() / 2, ImGuiCond_Appearing, {0.5f, 0.5f});
+    if (ImGui::BeginPopup("Overwrite File?"))
+    {
+      ImGui::TextUnformatted("This file already Exists!");
+      ImGui::Separator();
+
+      ImGui::Text("Overwrite the File %s?", fd->inputText.c_str());
+      if (ImGui::Button(GetIconString(ICON_MD_CHECK, "Overwrite")))
+      {
+        OpenNow();
+      }
+      ImGui::SameLine();
+      if (ImGui::Button(GetIconString(ICON_MD_CANCEL, "Cancel")))
+      {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
   }
 
-  void ImGuiFD::Shutdown()
+  static void CloseDialogID(ImGuiID id)
   {
-    openDialogs.clear(); // this is crucial to call all the deconstructors before the stuff they
-                         // depend on gets shut down
+    if (openDialogs.contains(id))
+      openDialogs.getByID(id).toDelete = true;
+  }
+} // namespace ImGuiFD
+
+ImGuiFD::RequestFileDataCallback ImGuiFD::FileDataCache::requestFileDataCallB = 0;
+ImGuiFD::FreeFileDataCallback ImGuiFD::FileDataCache::freeFileDataCallB = 0;
+
+ImGuiFD::DirEntry::DirEntry() {}
+ImGuiFD::DirEntry::DirEntry(const DirEntry &src)
+{
+  operator=(src);
+}
+ImGuiFD::DirEntry &ImGuiFD::DirEntry::operator=(const DirEntry &src)
+{
+  id = src.id;
+  name = src.name ? ImStrdup(src.name) : 0;
+  dir = src.dir ? ImStrdup(src.dir) : 0;
+  path = src.dir ? ImStrdup(src.path) : 0;
+  isFolder = src.isFolder;
+
+  size = src.size;
+  lastModified = src.lastModified;
+  creationDate = src.creationDate;
+
+  return *this;
+}
+ImGuiFD::DirEntry::~DirEntry()
+{
+  IM_FREE((void *)name);
+  IM_FREE((void *)dir);
+  IM_FREE((void *)path);
+}
+
+uint64_t ImGuiFD::FileData::getSize() const
+{
+  uint64_t size = 0;
+  if (thumbnail)
+    size += thumbnail->memSize;
+  return size;
+}
+
+void ImGuiFD::SetFileDataCallback(
+    RequestFileDataCallback loadCallB, FreeFileDataCallback unloadCallB)
+{
+  FileDataCache::requestFileDataCallB = loadCallB;
+  FileDataCache::freeFileDataCallB = unloadCallB;
+}
+
+ImGuiFD::FDInstance::FDInstance(const char *str_id) : str_id(str_id), id(ImHashStr(str_id)) {}
+void ImGuiFD::FDInstance::OpenDialog(ImGuiFDMode mode,
+                                     const char *path,
+                                     const char *filter,
+                                     ImGuiFDDialogFlags flags,
+                                     size_t maxSelections)
+{
+  ImGuiFD::OpenDialog(str_id.c_str(), mode, path, filter, flags, maxSelections);
+}
+bool ImGuiFD::FDInstance::Begin() const
+{
+  return ImGuiFD::BeginDialog(id);
+}
+void ImGuiFD::FDInstance::End() const
+{
+  ImGuiFD::EndDialog();
+}
+void ImGuiFD::FDInstance::DrawDialog(void (*callB)(void *userData), void *userData) const
+{
+  if (Begin())
+  {
+    if (ImGuiFD::ActionDone())
+    {
+      if (ImGuiFD::SelectionMade())
+      {
+        callB(userData);
+      }
+      ImGuiFD::CloseCurrentDialog();
+    }
+    End();
+  }
+}
+size_t ImGuiFD::FDInstance::sizeBytes() const
+{
+  return ds::size_bytes(str_id) + sizeof(id);
+}
+
+void ImGuiFD::OpenDialog(const char *str_id,
+                         ImGuiFDMode mode,
+                         const char *path,
+                         const char *filter,
+                         ImGuiFDDialogFlags flags,
+                         size_t maxSelections)
+{
+  ImGuiID id = ImHashStr(str_id);
+#if 0
+	IM_ASSERT(!openDialogs.contains(id));
+#else
+  if (openDialogs.contains(id))
+  {
+    if (openDialogs.getByID(id).toDelete)
+    {
+      openDialogs.erase(id);
+    }
+    else
+    {
+      return;
+    }
+  }
+#endif
+  if (!settings.iconTextColSetByUser)
+  {
+    ImVec4 childBg = ImGui::GetStyle().Colors[ImGuiCol_ChildBg];
+    settings.iconTextCol = ImVec4(1.0f - childBg.x, 1.0f - childBg.y, 1.0f - childBg.z, childBg.w);
+  }
+  openDialogs.insert(id, FileDialog(id, str_id, filter, path, mode, flags, maxSelections));
+}
+
+void ImGuiFD::CloseDialog(const char *str_id)
+{
+  ImGuiID id = ImHashStr(str_id);
+  CloseDialogID(id);
+}
+void ImGuiFD::CloseCurrentDialog()
+{
+  IM_ASSERT(fd != 0);
+  ImGuiID id = fd->id;
+  CloseDialogID(id);
+}
+
+bool ImGuiFD::BeginDialog(const char *str_id)
+{
+  ImGuiID id = ImHashStr(str_id);
+  return BeginDialog(id);
+}
+bool ImGuiFD::BeginDialog(ImGuiID id)
+{
+  // Begin/End mismatch
+  IM_ASSERT(fd == 0);
+
+  if (!openDialogs.contains(id))
+    return false;
+
+  fd = &openDialogs.getByID(id);
+
+  ImGuiWindowFlags flags = 0;
+  // if (fd->isModal) flags |= ImGuiWindowFlags_Modal;
+
+  bool open = true;
+  bool ret;
+
+  ImGui::SetNextWindowSize(ImVec2(700, 400), ImGuiCond_Appearing);
+  if (ImGui::Begin(fd->str_id.c_str(), &open, flags))
+  {
+    fd->update();
+
+    if (fd->showLoadErrorMsg)
+    {
+      fd->showLoadErrorMsg = false;
+      ImGui::OpenPopup("Couldn't load directory! ");
+    }
+
+    if (ImGui::BeginPopupModal("Couldn't load directory! "))
+    {
+      ImGui::TextUnformatted("Couln't load this directory :(");
+      if (ImGui::Button("OK"))
+      {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+      goto skip;
+    }
+
+    DrawNavigation();
+
+    DrawDirFiles();
+
+    DrawTextField();
+
+  skip:
+    if (!open)
+    {
+      fd->actionDone = true;
+      fd->selectionMade = false;
+    }
+    ret = true;
+  }
+  else
+  {
+    fd = 0;
+    ret = false;
   }
 
-  /*
+  ImGui::End();
 
-  // remove buttons from the front until the ellipse button also fits in
-  //while (totalWidth + ellipseBtnWidth > width && lastToFit < fd->currentPath.parts.size()) {
-  //	totalWidth -= ImGui::CalcTextSize(fd->currentPath.parts[lastToFit].c_str(), NULL, true).x +
-  style.FramePadding.x * 2 + style.ItemSpacing.x;
-  //	lastToFit++;
-  //}
+  return ret;
+}
+void ImGuiFD::EndDialog()
+{
+  // Begin/End mismatch
+  IM_ASSERT(fd != 0);
 
-  */
+  if (fd->toDelete)
+    openDialogs.erase(fd->id);
+
+  fd = 0;
+}
+
+bool ImGuiFD::ActionDone()
+{
+  IM_ASSERT(fd != 0);
+  return fd->actionDone;
+}
+bool ImGuiFD::SelectionMade()
+{
+  IM_ASSERT(fd != 0);
+  return fd->selectionMade;
+}
+const char *ImGuiFD::GetResultStringRaw()
+{
+  IM_ASSERT(fd != 0);
+
+  IM_ASSERT(fd->selectionMade);
+
+  return fd->inputText.c_str();
+}
+size_t ImGuiFD::GetSelectionStringsAmt()
+{
+  IM_ASSERT(fd != 0);
+
+  IM_ASSERT(fd->selectionMade);
+
+  return fd->selected.size();
+}
+const char *ImGuiFD::GetSelectionNameString(size_t ind)
+{
+  IM_ASSERT(fd != 0);
+
+  IM_ASSERT(fd->selectionMade); // maybe you didn't check if a selection was made?
+
+  return fd->inputStrs[ind].first.c_str();
+}
+const char *ImGuiFD::GetSelectionPathString(size_t ind)
+{
+  IM_ASSERT(fd != 0);
+
+  IM_ASSERT(fd->selectionMade); // maybe you didn't check if a selection was made?
+
+  return fd->inputStrs[ind].second.c_str();
+}
+
+void ImGuiFD::DrawDebugWin(const char *str_id)
+{
+  IM_ASSERT(fd == 0);
+
+  ImGuiID id = ImHashStr(str_id);
+
+  if (!openDialogs.contains(id))
+    return;
+
+  fd = &openDialogs.getByID(id);
+
+  if (ImGui::Begin((fd->str_id + "_DEBUG").c_str()))
+  {
+    float perc = ((float)fd->fileDataCache.size() / (float)fd->fileDataCache.maxSize()) * 100;
+    ImGui::Text("DataLoader: %" PRIu64 "/%" PRIu64 "(%f%%) used",
+                fd->fileDataCache.size(),
+                fd->fileDataCache.maxSize(),
+                perc);
+
+    /*ImGui::Text("%d loaded", fd->fileDataCache.getOrder().size());
+
+    if (ImGui::BeginTable("Loaded", 5)) {
+            const auto& order = fd->fileDataCache.getOrder();
+            const auto& data = fd->fileDataCache.getData();
+
+            ImGui::TableSetupColumn("TN");
+            ImGui::TableSetupColumn("Need");
+            ImGui::TableSetupColumn("Finished");
+
+            for (size_t i = 0; i < order.size(); i++) {
+                    const auto& elem = data.getByID(order[i]);
+
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+
+                    ImGui::Text("%s", !!elem->thumbnail ? "#" : ".");
+
+                    ImGui::TableNextColumn();
+
+                    ImGui::Text("%s", !!elem->stillNeeded ? "#" : ".");
+
+                    ImGui::TableNextColumn();
+
+                    ImGui::Text("%d", elem->loadingFinished);
+            }
+
+            ImGui::EndTable();
+    }*/
+  }
+  ImGui::End();
+
+  fd = 0;
+}
+
+void ImGuiFD::Shutdown()
+{
+  openDialogs.clear(); // this is crucial to call all the deconstructors before the stuff they
+                       // depend on gets shut down
+}
+
+/*
+
+// remove buttons from the front until the ellipse button also fits in
+//while (totalWidth + ellipseBtnWidth > width && lastToFit < fd->currentPath.parts.size()) {
+//	totalWidth -= ImGui::CalcTextSize(fd->currentPath.parts[lastToFit].c_str(), NULL, true).x +
+style.FramePadding.x * 2 + style.ItemSpacing.x;
+//	lastToFit++;
+//}
+
+*/

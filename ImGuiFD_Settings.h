@@ -4,7 +4,8 @@
 
 #include "imgui.h"
 
-namespace ImGuiFD_Settings {
+namespace ImGuiFD_Settings
+{
     static bool useMaterialSymbols = true;
     static ImVec4 iconColor = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
 }

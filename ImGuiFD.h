@@ -73,6 +73,7 @@ struct GlobalSettings {
   ImVec4 descTextCol = {.7f, .7f, .7f, 1};
 
   bool asciiArtIcons = true;
+  bool iconTextColSetByUser = false;
 };
 
 static GlobalSettings settings;

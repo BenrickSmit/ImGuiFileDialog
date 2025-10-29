@@ -1120,7 +1120,7 @@ namespace ImGuiFD
 
   static const char *GetIconString(const char *materialSymbol, const char *fallbackText)
   {
-    if (settings.useMaterialSymbols)
+    if (settings.asciiArtIcons)
     {
       return materialSymbol;
     }
@@ -1812,7 +1812,7 @@ namespace ImGuiFD
               {
                 iconText = GetIconString(entry.isFolder ? ICON_MD_FOLDER : ICON_MD_INSERT_DRIVE_FILE,
                                          entry.isFolder ? "[DIR]" : "[FILE]");
-                if (settings.useMaterialSymbols)
+                if (settings.asciiArtIcons)
                 {
                   // Temporarily increase font scale for the icon
                   ImGui::SetWindowFontScale(2.2f); // Adjust scale as needed
@@ -1829,8 +1829,7 @@ namespace ImGuiFD
               ImGui::TextColored(settings.iconTextCol, "%s", iconText);
 
               // Reset font scale after rendering the icon
-              if (!settings.asciiArtIcons &&
-                  settings.useMaterialSymbols)
+              if (!settings.asciiArtIcons)
               { // Only reset if we scaled it
                 ImGui::SetWindowFontScale(1.0f);
               }

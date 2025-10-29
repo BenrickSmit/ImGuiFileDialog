@@ -1808,7 +1808,7 @@ namespace ImGuiFD
               }
 
               const char *iconText;
-              if (!settings.asciiArtIcons)
+              if (settings.asciiArtIcons)
               {
                 iconText = GetIconString(entry.isFolder ? ICON_MD_FOLDER : ICON_MD_INSERT_DRIVE_FILE,
                                          entry.isFolder ? "[DIR]" : "[FILE]");
@@ -1829,7 +1829,7 @@ namespace ImGuiFD
               ImGui::TextColored(settings.iconTextCol, "%s", iconText);
 
               // Reset font scale after rendering the icon
-              if (!settings.asciiArtIcons)
+              if (settings.asciiArtIcons)
               { // Only reset if we scaled it
                 ImGui::SetWindowFontScale(1.0f);
               }
